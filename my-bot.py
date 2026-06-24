@@ -5,85 +5,94 @@ import sqlite3
 import os
 
 TOKEN = os.environ.get('BOT_TOKEN')
-bot = telebot.TeleBot(TOKEN) # замените на реальный токен
+bot = telebot.TeleBot(TOKEN)
 
-# PROXY_URL = 'http://a56j7MHTi:8rk9jmyZ7@142.111.253.156:64874'
-# apihelper.proxy = {'http': PROXY_URL, 'https': PROXY_URL}
-
-
-# ---------- Функции для работы с БД ----------
 def init_db():
-    """Создаёт таблицу users, если её нет."""
-    conn = sqlite3.connect('user.sql')
-    cursor = conn.cursor()
-    try:
-        cursor.execute('''CREATE TABLE IF NOT EXISTS users(
-            id INTEGER PRIMARY KEY,
-            username TEXT,
-            first_name TEXT
-        )''')
-        conn.commit()
-    finally:
-        cursor.close()
-        conn.close()
+    conn = sqlite3.connect('user.db')
+    cur = conn.cursor()
 
-def add_user(user_id, username, first_name):
-    """Добавляет пользователя в таблицу (если его ещё нет)."""
-    conn = sqlite3.connect('user.sql')
-    cursor = conn.cursor()
-    try:
-        cursor.execute(
-            'INSERT OR IGNORE INTO users (id, username, first_name) VALUES (?, ?, ?)',
-            (user_id, username, first_name)
-        )
-        conn.commit()
-    finally:
-        cursor.close()
-        conn.close()
+    cur.execute('''
+                CREATE TABLE IF NOT EXISTS users
+                (id INTEGER PRIMARY KEY,
+                user_id INTEGER UNIQUE,
+                username TEXT,
+                )
+                ''')
+    conn.commit()
+    cur.close()
+    conn.close()
 
-# ---------- Функция создания клавиатуры (вынесена отдельно) ----------
-def main_menu():
-    """Возвращает объект InlineKeyboardMarkup с кнопками."""
-    markup = types.InlineKeyboardMarkup(row_width=2)
-    btn1 = types.InlineKeyboardButton('👤Обо мне', callback_data='about')
-    btn2 = types.InlineKeyboardButton('💰 Услуги', callback_data='services')
-    btn3 = types.InlineKeyboardButton('📂 Портфолио', callback_data='portfolio')
-    btn4 = types.InlineKeyboardButton('📱 Контакты', callback_data='contacts')
-    markup.row(btn1, btn2)
-    markup.row(btn3, btn4)
-    return markup
 
-# ---------- Обработчик команды /start (ОДИН, правильно написанный) ----------
+
+
+def main_menu_keyboard():
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        btn1 = types.KeyboardButton(text = ' 💅Услуги')
+        btn2 = types.KeyboardButton(text = '💰 Прайс-лист')
+        btn3 = types.KeyboardButton(text = '📅Записаться')
+        btn4 = types.KeyboardButton(text = '📱 Контакты')
+        markup.row(btn1, btn2)
+        markup.row(btn3, btn4)
+        return markup
+
+        bot.send_message(message.chat.id, f"Добро пожаловать в 'Салон', {message.from_user.first_name}! \nВыбирайте нужный раздел в меню ниже:", reply_markup=markup)
+# Обработчик нажатий
+
+@bot.message_handler(content_types=['text'])
+def handle_text(message):
+     if message.text == '💅Услуги':
+          text = ('Наши услуги: \n')
+          'Маникюр и педикюр\n'
+          'Стрижки и окрашивание\n'
+          'Уход за лицом\n'
+          'Макияж'
+          
+          bot.send_message(message.chat.id, text)
+     
+     elif message.text == '💰 Прайс-лист':
+          text = ('Прайс-лист\n')
+          '- Маникюр: от 1500\n'
+          '- Стрижка: от 2000\n'
+          
+          bot.send_message(message.chat.id, text)
+
+     elif message.text == '📱 Контакты':
+          bot.send_message(message.chat.id, '🏠 Адрес: ул Красивая, д.10\n 📞 Тел: 7 (999) 000-00-00\n ⏰ Часы работы: 10:00 - 21:00')
+
+     elif message.text == '📅Записаться':
+          msg = bot.send_message(message.chat.id, 'Введите ваше имя и желаемую услугу:')
+          bot.register_next_step_handler(msg, process_name)
+
+# Процесс записи 
+def process_name(message):
+     user_data = {}
+     user_data['name'] = message.text
+     msg = bot.send_message(message.chat.id, 'Введите ваш номер телефона для связи')
+     bot.register_next_step_handler(msg, process_phone, user_data)
+
+def process_phone(message, user_data):
+     phone = message.text
+     name = user_data['name']
+
+
+
 @bot.message_handler(commands=['start'])
 def start(message):
-    # 1. Инициализация БД
-    init_db()
-    # 2. Добавление пользователя
-    add_user(message.from_user.id, message.from_user.username, message.from_user.first_name)
-    # 3. Получаем клавиатуру
-    keyboard = main_menu()
-    # 4. Отправляем приветствие с клавиатурой
-    bot.send_message(message.chat.id, 'Добро пожаловать! Выберите раздел:', reply_markup=keyboard)
+     conn = sqlite3.connect('salon_beauty.sql')
+     cur = conn.cursor()
+     cur.execute('INSERT INTO appointments(user_id, client_name, phone) VALUES (?, ?, ?)',
+                 (message.from_user.id, process_name, process_phone))
+     conn.commit()
+     conn.close()
 
-# ---------- Обработчик нажатий на кнопки ----------
-@bot.callback_query_handler(func=lambda call: True)
-def callback_inline(call):
-    # Формируем текст в зависимости от нажатой кнопки
-    if call.data == 'about':
-        text = '👤 Обо мне: я разработчик Telegram-ботов.'
-    elif call.data == 'services':
-        text = '💰 Услуги: создание ботов, автоматизация, парсинг.'
-    elif call.data == 'portfolio':
-        text = '📂 Портфолио: примеры работ можно посмотреть на моём сайте.'
-    elif call.data == 'contacts':
-        text = '📱 Контакты: @my_username или почта example@mail.ru'
-    else:
-        text = 'Раздел в разработке.'
+     bot.send_message(message.chat.id, f'✅Спасибо мы свяжемся с вами по номеру {process_phone} для подтверждения записи.')
 
-    # Отправляем сообщение с текстом (исправлено – теперь текст правильно формируется)
-    bot.send_message(call.message.chat.id, text)
-    # Отвечаем на callback, чтобы убрать «часики» у кнопки
-    bot.answer_callback_query(call.id)
+
+
+
+
+
+
 
 # ---------- Основной цикл ----------
 while True:
